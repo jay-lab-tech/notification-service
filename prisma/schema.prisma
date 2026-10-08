@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  SMS
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+  DLQ
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum DeliveryLogStatus {
+  ATTEMPT
+  SUCCESS
+  FAILED
+}
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @db.VarChar(100)
+  serviceName String    @unique @db.VarChar(100)
+  keyHash     String    @unique @db.Char(64)
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([serviceName])
+}
+
+model Template {
+  id            String              @id @default(uuid()) @db.Uuid
+  code          String              @unique @db.VarChar(100)
+  name          String              @db.VarChar(150)
+  channel       NotificationChannel
+  subject       String?             @db.VarChar(300)
+  body          String              @db.Text
+  variables     Json                @default("{}")
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  notifications Notification[]
+
+  @@index([channel, isActive])
+}
+
+model Notification {
+  id             String               @id @default(uuid()) @db.Uuid
+  idempotencyKey String?              @unique @db.VarChar(200)
+  sourceService  String               @db.VarChar(100)
+  userId         String?              @db.VarChar(150)
+  channel        NotificationChannel
+  recipient      String               @db.Text
+  templateCode   String?              @db.VarChar(100)
+  template       Template?            @relation(fields: [templateCode], references: [code], onDelete: SetNull)
+  subject        String?              @db.VarChar(300)
+  body           String               @db.Text
+  status         NotificationStatus   @default(QUEUED)
+  priority       NotificationPriority @default(NORMAL)
+  attempts       Int                  @default(0)
+  maxAttempts    Int                  @default(3)
+  metadata       Json?
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  failedAt       DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deliveryLogs   DeliveryLog[]
+
+  @@index([sourceService, createdAt])
+  @@index([status, scheduledAt])
+  @@index([channel, createdAt])
+}
+
+model DeliveryLog {
+  id               BigInt              @id @default(autoincrement())
+  notificationId   String              @db.Uuid
+  notification     Notification        @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel          NotificationChannel
+  provider         String              @db.VarChar(80)
+  status           DeliveryLogStatus
+  attemptNumber    Int
+  errorMessage     String?             @db.Text
+  providerResponse Json?
+  durationMs       Int?
+  createdAt        DateTime            @default(now())
+
+  @@index([notificationId, createdAt])
+}
