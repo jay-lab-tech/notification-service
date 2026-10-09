@@ -4,6 +4,9 @@ import { ApiError } from '../utils/ApiError.js';
 
 export const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
   if (error instanceof ApiError) {
+    if (error.retryAfterSeconds !== undefined) {
+      response.setHeader('Retry-After', error.retryAfterSeconds);
+    }
     response.status(error.statusCode).json({
       error: { code: error.code, message: error.message },
     });

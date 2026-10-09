@@ -22,6 +22,8 @@ docker compose up --build
 The API listens on `http://localhost:3003`, PostgreSQL is exposed on port `5436`, and Redis on port `6383`. These host ports are chosen to avoid collisions with the other portfolio services.
 Compose starts the API and a separate worker. The default `EMAIL_MODE=log` simulates provider acceptance and does not send an external email.
 
+Interactive API docs are available at `http://localhost:3003/docs`; the OpenAPI contract is at `http://localhost:3003/docs/openapi.yaml`.
+
 Check liveness and dependency readiness:
 
 ```powershell

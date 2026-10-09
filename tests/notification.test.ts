@@ -91,6 +91,7 @@ test('bulk delivery returns per-item results and recipient rate limit is enforce
   }
 
   let lastStatus = 0;
+  let retryAfter: string | null = null;
   for (let index = 0; index < 11; index += 1) {
     const response = await fetch(`${baseUrl}/api/notifications/send`, {
       method: 'POST',
@@ -104,12 +105,14 @@ test('bulk delivery returns per-item results and recipient rate limit is enforce
       }),
     });
     lastStatus = response.status;
+    if (response.status === 429) retryAfter = response.headers.get('retry-after');
     if (response.status === 202) {
       const payload = await response.json() as { data: { id: string } };
       createdNotifications.push({ id: payload.data.id, channel: 'EMAIL' });
     }
   }
   assert.equal(lastStatus, 429);
+  assert.ok(retryAfter && Number(retryAfter) > 0);
 });
 
 test('send is idempotent per source service and history is scoped', async () => {

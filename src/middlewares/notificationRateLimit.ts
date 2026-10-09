@@ -22,7 +22,12 @@ export async function consumeNotificationRateLimit(
   const [count, ttlMilliseconds] = result;
   if (count > env.NOTIFICATION_RATE_LIMIT) {
     const retryAfterSeconds = Math.max(1, Math.ceil(ttlMilliseconds / 1000));
-    throw new ApiError(429, 'RATE_LIMIT_EXCEEDED', `Notification limit reached; retry in ${retryAfterSeconds}s`);
+    throw new ApiError(
+      429,
+      'RATE_LIMIT_EXCEEDED',
+      `Notification limit reached; retry in ${retryAfterSeconds}s`,
+      retryAfterSeconds,
+    );
   }
 }
 

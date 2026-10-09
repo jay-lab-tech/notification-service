@@ -1,5 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
+import path from 'node:path';
 import { healthRoute } from './modules/health/health.route.js';
 import { notificationRoute } from './modules/notification/notification.route.js';
 import { templateRoute } from './modules/template/template.route.js';
@@ -11,6 +12,15 @@ export const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(express.json({ limit: '256kb' }));
+
+app.get(['/docs', '/docs/'], (_request, response) => {
+  response.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:",
+  );
+  response.sendFile(path.resolve('docs/index.html'));
+});
+app.use('/docs', express.static('docs'));
 
 app.get('/health', (_request, response) => {
   response.status(200).json({ data: { status: 'ok' } });

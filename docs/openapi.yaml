@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: Notification Service API
+  version: 0.1.0
+  description: Service-to-service notification API with templates, queues, delivery tracking, and service-scoped idempotency.
+servers:
+  - url: http://localhost:3003
+    description: Local development
+tags:
+  - name: Health
+  - name: Notifications
+  - name: Templates
+  - name: Dead letter
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      responses:
+        '200':
+          description: API process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, properties: { status: { const: ok } }, required: [status] }
+  /health/deep:
+    get:
+      tags: [Health]
+      summary: PostgreSQL and Redis readiness
+      responses:
+        '200': { description: Dependencies are ready }
+        '503': { description: One or more dependencies are unavailable }
+  /health/queues:
+    get:
+      tags: [Health]
+      summary: Queue counts by channel
+      responses:
+        '200': { description: Queue count snapshot }
+  /api/notifications/send:
+    post:
+      tags: [Notifications]
+      summary: Submit one notification
+      security: [{ ApiKeyAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendNotification' }
+      responses:
+        '202': { description: Accepted and queued }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { description: Queue unavailable; retry with the same idempotency key }
+  /api/notifications/bulk:
+    post:
+      tags: [Notifications]
+      summary: Submit up to 100 notifications
+      description: Returns per-item results. Rate-limited or service-level queue/template failures do not cancel other items.
+      security: [{ ApiKeyAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notifications]
+              properties:
+                notifications:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/SendNotification' }
+      responses:
+        '202': { description: Bulk results with accepted and rejected counts }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications for the authenticated service
+      security: [{ ApiKeyAuth: [] }]
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: cursor
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Paginated service-owned notifications }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/notifications/{id}:
+    get:
+      tags: [Notifications]
+      summary: Get one notification owned by the authenticated service
+      security: [{ ApiKeyAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Notification state and rendered content }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Notification not found }
+  /api/templates:
+    get:
+      tags: [Templates]
+      summary: List templates for the authenticated service
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200': { description: Active templates }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Templates]
+      summary: Create a service-owned template
+      security: [{ ApiKeyAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateInput' }
+      responses:
+        '201': { description: Template created }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: Template code already exists for this service }
+  /api/templates/{code}:
+    parameters:
+      - in: path
+        name: code
+        required: true
+        schema: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' }
+    get:
+      tags: [Templates]
+      summary: Read an active template owned by the authenticated service
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200': { description: Template details }
+        '404': { description: Template not found }
+    put:
+      tags: [Templates]
+      summary: Replace and activate a service-owned template
+      security: [{ ApiKeyAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TemplateUpdate' }
+      responses:
+        '200': { description: Template updated }
+        '404': { description: Template not found }
+    delete:
+      tags: [Templates]
+      summary: Deactivate a service-owned template
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '204': { description: Template deactivated }
+        '404': { description: Template not found }
+  /api/dead-letter:
+    get:
+      tags: [Dead letter]
+      summary: List dead-letter jobs for the authenticated service
+      security: [{ ApiKeyAuth: [] }]
+      responses:
+        '200': { description: Service-owned dead-letter jobs }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/dead-letter/{jobId}/retry:
+    post:
+      tags: [Dead letter]
+      summary: Retry a service-owned dead-letter job
+      security: [{ ApiKeyAuth: [] }]
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Notification was requeued }
+        '404': { description: Dead-letter job not found }
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    SendNotification:
+      type: object
+      required: [channel, recipient]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        recipient: { type: string, minLength: 1, maxLength: 2048 }
+        subject: { type: string, maxLength: 300 }
+        body: { type: string, maxLength: 100000 }
+        templateCode: { type: string, maxLength: 100 }
+        variables: { type: object, additionalProperties: true }
+        idempotencyKey: { type: string, maxLength: 200 }
+        userId: { type: string, maxLength: 150 }
+        priority: { type: string, enum: [LOW, NORMAL, HIGH], default: NORMAL }
+        metadata: { type: object, additionalProperties: true }
+        scheduledAt: { type: string, format: date-time }
+      description: Supply body, or templateCode and variables. EMAIL requires a subject when body is supplied.
+    TemplateInput:
+      type: object
+      required: [code, name, channel, body]
+      properties:
+        code: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 100 }
+        name: { type: string, minLength: 1, maxLength: 150 }
+        channel: { $ref: '#/components/schemas/Channel' }
+        subject: { type: string, maxLength: 300 }
+        body: { type: string, maxLength: 100000 }
+        variables: { type: array, items: { type: string }, default: [] }
+    TemplateUpdate:
+      type: object
+      required: [name, channel, body]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        channel: { $ref: '#/components/schemas/Channel' }
+        subject: { type: string, maxLength: 300 }
+        body: { type: string, maxLength: 100000 }
+        variables: { type: array, items: { type: string }, default: [] }
+    Channel:
+      type: string
+      enum: [EMAIL, PUSH, SMS, WEBHOOK]
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: API key is missing, invalid, or inactive
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Per-service, per-channel, per-recipient rate limit reached
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

@@ -35,3 +35,13 @@ test('unknown routes return a consistent 404 response', async () => {
     error: { code: 'NOT_FOUND', message: 'Route not found' },
   });
 });
+
+test('Swagger UI and OpenAPI contract are served locally', async () => {
+  const ui = await fetch(`${baseUrl}/docs`);
+  assert.equal(ui.status, 200);
+  assert.match(await ui.text(), /swagger-ui/);
+
+  const contract = await fetch(`${baseUrl}/docs/openapi.yaml`);
+  assert.equal(contract.status, 200);
+  assert.match(await contract.text(), /openapi: 3\.1\.0/);
+});
