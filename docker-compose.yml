@@ -6,6 +6,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3003
+      NOTIFICATION_RATE_LIMIT: 10
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/notification_service?schema=public
       REDIS_URL: redis://redis:6379
       EMAIL_MODE: log

@@ -32,4 +32,8 @@ export const listNotificationsQuerySchema = z.object({
   cursor: z.uuid().optional(),
 });
 
+export const bulkNotificationsSchema = z.object({
+  notifications: z.array(sendNotificationSchema).min(1).max(100),
+});
+
 export type SendNotificationInput = z.infer<typeof sendNotificationSchema>;

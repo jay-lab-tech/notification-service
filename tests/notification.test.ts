@@ -67,6 +67,51 @@ test('queue health reports channel queues', async () => {
   assert.ok('notifications-dead-letter' in body.data.queues);
 });
 
+test('bulk delivery returns per-item results and recipient rate limit is enforced', async () => {
+  const headers = { 'content-type': 'application/json', 'x-api-key': ownerKey.raw };
+  const recipient = `bulk-${randomUUID()}@example.com`;
+  const bulkResponse = await fetch(`${baseUrl}/api/notifications/bulk`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      notifications: [1, 2].map((number) => ({
+        channel: 'EMAIL',
+        recipient: `${number}-${recipient}`,
+        subject: 'Bulk test',
+        body: 'Bulk test message',
+      })),
+    }),
+  });
+  assert.equal(bulkResponse.status, 202);
+  const bulk = await bulkResponse.json() as { data: { accepted: number; rejected: number; results: Array<{ id?: string }> } };
+  assert.equal(bulk.data.accepted, 2);
+  assert.equal(bulk.data.rejected, 0);
+  for (const result of bulk.data.results) {
+    if (result.id) createdNotifications.push({ id: result.id, channel: 'EMAIL' });
+  }
+
+  let lastStatus = 0;
+  for (let index = 0; index < 11; index += 1) {
+    const response = await fetch(`${baseUrl}/api/notifications/send`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        channel: 'EMAIL',
+        recipient,
+        subject: 'Rate limit test',
+        body: `Attempt ${index}`,
+        idempotencyKey: randomUUID(),
+      }),
+    });
+    lastStatus = response.status;
+    if (response.status === 202) {
+      const payload = await response.json() as { data: { id: string } };
+      createdNotifications.push({ id: payload.data.id, channel: 'EMAIL' });
+    }
+  }
+  assert.equal(lastStatus, 429);
+});
+
 test('send is idempotent per source service and history is scoped', async () => {
   const payload = {
     channel: 'EMAIL',
@@ -102,7 +147,9 @@ test('send is idempotent per source service and history is scoped', async () => 
   const history = await fetch(`${baseUrl}/api/notifications`, { headers: { 'x-api-key': ownerKey.raw } });
   assert.equal(history.status, 200);
   const historyBody = await history.json() as { data: { items: Array<{ id: string }> } };
-  assert.deepEqual(historyBody.data.items.map((item) => item.id), [firstBody.data.id]);
+  const historyIds = historyBody.data.items.map((item) => item.id);
+  assert.ok(historyIds.includes(firstBody.data.id));
+  assert.equal(historyIds.includes(otherServiceBody.data.id), false);
 
   const foreignRead = await fetch(`${baseUrl}/api/notifications/${firstBody.data.id}`, {
     headers: { 'x-api-key': secondKey.raw },

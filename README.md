@@ -58,6 +58,10 @@ Invoke-RestMethod -Uri http://localhost:3003/api/notifications -Headers $headers
 
 Supported channels in the request contract are `EMAIL`, `PUSH`, `SMS`, and `WEBHOOK`. Email requires a subject, and webhook recipients must be valid URLs. The calling service identity comes from its API key and cannot be overridden in the request.
 
+`NOTIFICATION_RATE_LIMIT` sets the per-minute limit per service, channel, and recipient (default: 10). Recipient values are hashed before being used as Redis keys.
+
+Bulk requests accept up to 100 notifications at `POST /api/notifications/bulk`. The response uses HTTP `202` and reports each item's accepted or rejected result; a rate-limited item does not cancel the other items.
+
 ## Manage message templates
 
 Templates belong to the service associated with the API key. Required variables are listed when creating the template; Handlebars escapes rendered HTML values by default.

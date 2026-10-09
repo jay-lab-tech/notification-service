@@ -46,12 +46,14 @@ All consumer endpoints require `X-API-Key`.
 | GET | `/health` | Liveness |
 | GET | `/health/deep` | PostgreSQL and Redis readiness |
 | POST | `/api/notifications/send` | Accept one notification |
+| POST | `/api/notifications/bulk` | Accept up to 100 notifications with per-item results |
 | GET | `/api/notifications/:id` | Read status belonging to the caller's service |
 | GET | `/api/notifications` | Paginated history scoped to the caller's service |
 | GET/POST/PUT/DELETE | `/api/templates...` | Template management scoped to the API key's service |
 | GET | `/health/queues` | Queue counts for operational visibility |
 | GET | `/api/dead-letter` | List DLQ jobs belonging to the API key's service |
 | POST | `/api/dead-letter/:jobId/retry` | Retry a service-owned DLQ job |
+| GET | `/health/queues` | Queue counts for operational visibility |
 
 Bulk send, admin key management, and signed provider callbacks are planned additions. Public API responses must never return API key hashes or provider secrets.
 
@@ -59,7 +61,7 @@ Bulk send, admin key management, and signed provider callbacks are planned addit
 
 - Generate high-entropy API keys with a recognizable prefix; store only a SHA-256 digest and compare digests safely.
 - Scope notification reads to `sourceService` derived from the authenticated API key, never a caller-supplied identity.
-- Enforce request schemas, payload size limits, and rate limits by service/recipient/channel.
+- Enforce request schemas, payload size limits, and rate limits by service/recipient/channel. (Per-recipient/channel rate limiting implemented.)
 - Idempotency keys prevent duplicate requests; database uniqueness handles concurrent retries.
 - Escape template output by default and validate required variables.
 - Do not log API keys, message bodies, recipient secrets, or provider credentials.
@@ -77,6 +79,7 @@ Bulk send, admin key management, and signed provider callbacks are planned addit
 4. BullMQ producers/workers, delivery attempts, retry policy, service-scoped DLQ inspection and manual retry. (Implemented.)
 5. Email provider integration and local/test provider configuration. (SMTP and local simulation implemented.)
 6. Webhook channel and signed delivery callbacks; evaluate FCM/Twilio integrations as separate provider work.
-7. Rate limits, bulk APIs, operational docs, examples, and final verification.
+7. Per-recipient/channel Redis rate limits and bulk submission with item-level results. (Implemented.)
+8. Operational docs, examples, and final verification.
 
 The repository will be committed in small, cohesive increments. Deployment is intentionally deferred.
