@@ -49,7 +49,7 @@ All consumer endpoints require `X-API-Key`.
 | GET | `/api/notifications/:id` | Read status belonging to the caller's service |
 | GET | `/api/notifications` | Paginated history scoped to the caller's service |
 | GET/POST/PUT/DELETE | `/api/templates...` | Template management, scoped by API key/service policy |
-| GET | `/health/queues` | Queue counts for operational visibility |
+| GET | `/health/queues` | Planned: queue counts for operational visibility |
 
 Bulk send, admin key management, provider callbacks, and DLQ retry controls are planned additions and will be documented when implemented. Public API responses must never return API key hashes or provider secrets.
 

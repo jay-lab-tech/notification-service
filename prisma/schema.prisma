@@ -65,7 +65,7 @@ model Template {
 
 model Notification {
   id             String               @id @default(uuid()) @db.Uuid
-  idempotencyKey String?              @unique @db.VarChar(200)
+  idempotencyKey String?              @db.VarChar(200)
   sourceService  String               @db.VarChar(100)
   userId         String?              @db.VarChar(150)
   channel        NotificationChannel
@@ -90,6 +90,7 @@ model Notification {
   @@index([sourceService, createdAt])
   @@index([status, scheduledAt])
   @@index([channel, createdAt])
+  @@unique([sourceService, idempotencyKey])
 }
 
 model DeliveryLog {
