@@ -48,7 +48,7 @@ All consumer endpoints require `X-API-Key`.
 | POST | `/api/notifications/send` | Accept one notification |
 | GET | `/api/notifications/:id` | Read status belonging to the caller's service |
 | GET | `/api/notifications` | Paginated history scoped to the caller's service |
-| GET/POST/PUT/DELETE | `/api/templates...` | Template management, scoped by API key/service policy |
+| GET/POST/PUT/DELETE | `/api/templates...` | Template management scoped to the API key's service |
 | GET | `/health/queues` | Planned: queue counts for operational visibility |
 
 Bulk send, admin key management, provider callbacks, and DLQ retry controls are planned additions and will be documented when implemented. Public API responses must never return API key hashes or provider secrets.
@@ -70,10 +70,11 @@ Bulk send, admin key management, provider callbacks, and DLQ retry controls are 
 ## Planned milestones
 
 1. Repository foundation: TypeScript, Express, validated environment, health checks, Prisma models, Docker Compose, CI, and docs.
-2. API-key provisioning/authentication, templates, rendering, notification submission, idempotency, and status/history endpoints.
-3. BullMQ producers/workers, delivery attempts, retry policy, and DLQ inspection.
-4. Email provider integration and local/test provider configuration.
-5. Webhook channel and signed delivery callbacks; evaluate FCM/Twilio integrations as separate provider work.
-6. Rate limits, bulk APIs, operational docs, examples, and final verification.
+2. API-key provisioning/authentication, notification submission, idempotency, and status/history endpoints. (Implemented.)
+3. Service-scoped template CRUD, required-variable validation, and Handlebars rendering. (Implemented.)
+4. BullMQ producers/workers, delivery attempts, retry policy, and DLQ inspection.
+5. Email provider integration and local/test provider configuration.
+6. Webhook channel and signed delivery callbacks; evaluate FCM/Twilio integrations as separate provider work.
+7. Rate limits, bulk APIs, operational docs, examples, and final verification.
 
 The repository will be committed in small, cohesive increments. Deployment is intentionally deferred.

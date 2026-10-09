@@ -41,6 +41,7 @@ after(async () => {
   }
   await closeNotificationQueues();
   await prisma.notification.deleteMany({ where: { sourceService: { in: [ownerService, secondService] } } });
+  await prisma.template.deleteMany({ where: { sourceService: { in: [ownerService, secondService] } } });
   await prisma.apiKey.deleteMany({ where: { serviceName: { in: [ownerService, secondService] } } });
   await prisma.$disconnect();
   redis.disconnect();
@@ -103,4 +104,57 @@ test('email payloads require a subject', async () => {
     body: JSON.stringify({ channel: 'EMAIL', recipient: 'person@example.com', body: 'Missing subject' }),
   });
   assert.equal(response.status, 400);
+});
+
+test('templates are service-scoped and render safely when sending', async () => {
+  const headers = { 'content-type': 'application/json', 'x-api-key': ownerKey.raw };
+  const templateResponse = await fetch(`${baseUrl}/api/templates`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      code: 'welcome-email',
+      name: 'Welcome email',
+      channel: 'EMAIL',
+      subject: 'Welcome, {{name}}',
+      body: '<p>Hello {{name}}</p>',
+      variables: ['name'],
+    }),
+  });
+  assert.equal(templateResponse.status, 201);
+
+  const hiddenTemplate = await fetch(`${baseUrl}/api/templates/welcome-email`, {
+    headers: { 'x-api-key': secondKey.raw },
+  });
+  assert.equal(hiddenTemplate.status, 404);
+
+  const missingVariable = await fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      channel: 'EMAIL',
+      recipient: 'person@example.com',
+      templateCode: 'welcome-email',
+      variables: {},
+    }),
+  });
+  assert.equal(missingVariable.status, 400);
+
+  const sendResponse = await fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      channel: 'EMAIL',
+      recipient: 'person@example.com',
+      templateCode: 'welcome-email',
+      variables: { name: '<Azhar>' },
+    }),
+  });
+  assert.equal(sendResponse.status, 202);
+  const sent = await sendResponse.json() as { data: { id: string } };
+  createdNotifications.push({ id: sent.data.id, channel: 'EMAIL' });
+
+  const stored = await prisma.notification.findUniqueOrThrow({ where: { id: sent.data.id } });
+  assert.equal(stored.templateCode, 'welcome-email');
+  assert.equal(stored.subject, 'Welcome, &lt;Azhar&gt;');
+  assert.equal(stored.body, '<p>Hello &lt;Azhar&gt;</p>');
 });

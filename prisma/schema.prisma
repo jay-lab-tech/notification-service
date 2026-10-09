@@ -49,18 +49,20 @@ model ApiKey {
 
 model Template {
   id            String              @id @default(uuid()) @db.Uuid
-  code          String              @unique @db.VarChar(100)
+  sourceService String              @db.VarChar(100)
+  code          String              @db.VarChar(100)
   name          String              @db.VarChar(150)
   channel       NotificationChannel
   subject       String?             @db.VarChar(300)
   body          String              @db.Text
-  variables     Json                @default("{}")
+  variables     Json                @default("[]")
   isActive      Boolean             @default(true)
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   notifications Notification[]
 
-  @@index([channel, isActive])
+  @@unique([sourceService, code])
+  @@index([sourceService, channel, isActive])
 }
 
 model Notification {
@@ -71,7 +73,7 @@ model Notification {
   channel        NotificationChannel
   recipient      String               @db.Text
   templateCode   String?              @db.VarChar(100)
-  template       Template?            @relation(fields: [templateCode], references: [code], onDelete: SetNull)
+  template       Template?            @relation(fields: [sourceService, templateCode], references: [sourceService, code], onDelete: Restrict)
   subject        String?              @db.VarChar(300)
   body           String               @db.Text
   status         NotificationStatus   @default(QUEUED)
@@ -87,10 +89,10 @@ model Notification {
   updatedAt      DateTime             @updatedAt
   deliveryLogs   DeliveryLog[]
 
+  @@unique([sourceService, idempotencyKey])
   @@index([sourceService, createdAt])
   @@index([status, scheduledAt])
   @@index([channel, createdAt])
-  @@unique([sourceService, idempotencyKey])
 }
 
 model DeliveryLog {

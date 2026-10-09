@@ -4,7 +4,7 @@ Centralized notification API foundation for the `auth-service`, `E-Commerce-API`
 
 ## Current status
 
-The service now provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It also supports idempotency and service-scoped status/history reads. Delivery workers, templates, and external provider integrations are still planned; queued notifications remain `QUEUED` until a worker is added.
+The service provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It supports idempotency, service-scoped status/history, and service-scoped Handlebars templates. Delivery workers and external provider integrations are still planned; queued notifications remain `QUEUED` until a worker is added.
 
 ## Requirements
 
@@ -56,6 +56,36 @@ Invoke-RestMethod -Uri http://localhost:3003/api/notifications -Headers $headers
 ```
 
 Supported channels in the request contract are `EMAIL`, `PUSH`, `SMS`, and `WEBHOOK`. Email requires a subject, and webhook recipients must be valid URLs. The calling service identity comes from its API key and cannot be overridden in the request.
+
+## Manage message templates
+
+Templates belong to the service associated with the API key. Required variables are listed when creating the template; Handlebars escapes rendered HTML values by default.
+
+```powershell
+$template = @{
+  code = "welcome-email"
+  name = "Welcome email"
+  channel = "EMAIL"
+  subject = "Welcome, {{name}}"
+  body = "<p>Hello {{name}}</p>"
+  variables = @("name")
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://localhost:3003/api/templates `
+  -Headers $headers -ContentType "application/json" -Body $template
+
+$templatedNotification = @{
+  channel = "EMAIL"
+  recipient = "user@example.com"
+  templateCode = "welcome-email"
+  variables = @{ name = "Azhar" }
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://localhost:3003/api/notifications/send `
+  -Headers $headers -ContentType "application/json" -Body $templatedNotification
+```
+
+Template routes: `GET /api/templates`, `GET /api/templates/:code`, `POST /api/templates`, `PUT /api/templates/:code`, and `DELETE /api/templates/:code`. Delete deactivates the template; existing notifications keep their rendered content.
 
 ## Run API from Node.js
 

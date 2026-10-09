@@ -2,6 +2,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import type { NotificationChannel, NotificationPriority } from '../../generated/prisma/client.js';
 import { prisma } from '../../config/database.js';
 import { enqueueNotification } from '../../queues/notificationQueue.js';
+import { renderNotificationTemplate } from '../../templates/renderer.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { SendNotificationInput } from './notification.schema.js';
 
@@ -48,16 +49,26 @@ export async function sendNotification(sourceService: string, input: SendNotific
   }
 
   let notification;
+  const rendered = input.templateCode
+    ? await renderNotificationTemplate({
+      sourceService,
+      code: input.templateCode,
+      channel: input.channel as NotificationChannel,
+      variables: input.variables ?? {},
+    })
+    : { code: null, subject: input.subject ?? null, body: input.body ?? '' };
+
   try {
     notification = await prisma.notification.create({
       data: {
         sourceService,
         channel: input.channel as NotificationChannel,
         recipient: input.recipient,
-        body: input.body,
+        body: rendered.body,
         priority: input.priority as NotificationPriority,
         ...(input.userId ? { userId: input.userId } : {}),
-        ...(input.subject ? { subject: input.subject } : {}),
+        ...(rendered.subject ? { subject: rendered.subject } : {}),
+        ...(rendered.code ? { templateCode: rendered.code } : {}),
         ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
         ...(input.metadata ? { metadata: input.metadata as Prisma.InputJsonValue } : {}),
         ...(input.scheduledAt ? { scheduledAt: new Date(input.scheduledAt) } : {}),
