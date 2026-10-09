@@ -32,7 +32,7 @@ The API, queue producer, and workers are separate layers. A request is accepted 
 
 ## Data model
 
-- `ApiKey`: service name, unique key hash, active/revoked state, last-used timestamp.
+- `ApiKey`: service name, unique key hash, active/revoked state, last-used timestamp. Multiple keys per service support credential rotation.
 - `Template`: service-scoped code, channel, subject/body, required variables, active state.
 - `Notification`: idempotency key, source service, optional source user ID, channel, recipient, rendered content, status, priority, attempts, schedule and lifecycle timestamps, metadata.
 - `DeliveryLog`: notification relation, channel/provider, attempt result, provider response, error and duration.

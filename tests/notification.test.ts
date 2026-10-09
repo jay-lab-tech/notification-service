@@ -59,6 +59,18 @@ test('notification API requires a valid API key', async () => {
   assert.equal(response.status, 401);
 });
 
+test('a service can temporarily hold multiple active API keys for rotation', async () => {
+  const replacement = createApiKey();
+  await prisma.apiKey.create({
+    data: { name: 'integration-test-rotation', serviceName: ownerService, keyHash: replacement.hash },
+  });
+
+  const response = await fetch(`${baseUrl}/api/notifications`, {
+    headers: { 'x-api-key': replacement.raw },
+  });
+  assert.equal(response.status, 200);
+});
+
 test('queue health reports channel queues', async () => {
   const response = await fetch(`${baseUrl}/health/queues`);
   assert.equal(response.status, 200);

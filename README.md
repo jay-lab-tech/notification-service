@@ -39,7 +39,16 @@ With the local Postgres service running and `.env` configured, create a key for 
 npm run api-key:create -- auth-service "Auth Service"
 ```
 
-The command prints the raw key once. Store it as a secret in the consumer service; PostgreSQL stores only its SHA-256 hash. API keys authenticate through the `X-API-Key` header.
+The command prints the raw key once. Store it as a secret in the consumer service; PostgreSQL stores only its SHA-256 hash. API keys authenticate through the `X-API-Key` header. Multiple active keys can belong to one service, allowing a rotation window.
+
+List key metadata (never the secret) and revoke an old key by its ID:
+
+```powershell
+npm run api-key:list -- auth-service
+npm run api-key:revoke -- <api-key-id>
+```
+
+For rotation, create a replacement key, update the consumer's secret, confirm it works, then revoke the old key.
 
 ## Submit and inspect a notification
 
