@@ -1,6 +1,9 @@
 services:
   api:
     build: .
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "3003:3003"
     environment:
@@ -27,6 +30,9 @@ services:
   worker:
     build: .
     command: ["npm", "run", "worker"]
+    env_file:
+      - path: .env
+        required: false
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/notification_service?schema=public

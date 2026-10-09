@@ -4,7 +4,7 @@ Centralized notification API foundation for the `auth-service`, `E-Commerce-API`
 
 ## Current status
 
-The service provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It supports idempotency, service-scoped status/history and Handlebars templates, delivery logs, retries, and dead-letter inspection/retry. Email supports SMTP and local simulation. Push, SMS, and outbound webhook provider delivery are not integrated yet and will retry into the DLQ.
+The service provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It supports idempotency, service-scoped status/history and Handlebars templates, delivery logs, retries, one optional cross-channel fallback, and dead-letter inspection/retry. Email supports SMTP and local simulation; push uses FCM HTTP v1, SMS uses Twilio, and outbound webhooks use signed HTTPS requests restricted to an operator allowlist. Provider credentials are optional, so unconfigured channels retry into the DLQ.
 
 ## Requirements
 
@@ -119,6 +119,8 @@ Copy `.env.example` to `.env` for host-run development. Do not commit `.env` or 
 
 For real email, set `EMAIL_MODE=smtp`, `SMTP_URL`, and `EMAIL_FROM` in both API and worker environments.
 
+Push (FCM), SMS (Twilio), and signed webhook configuration are optional. See [provider setup and security](docs/PROVIDERS.md) and [consumer integration examples](docs/INTEGRATION.md). Keep credentials in local environment secrets; never commit them. Webhook destinations must use HTTPS on port 443 and an explicitly configured host allowlist. Twilio delivery receipts can update SMS status when a public HTTPS status callback URL is configured.
+
 ## Delivery tracking and DLQ
 
 `GET /health/queues` reports channel queue counts. Authenticated consumers can inspect their own dead-letter jobs using `GET /api/dead-letter` and retry one using `POST /api/dead-letter/:jobId/retry`. A retry resets the attempt counter; delivery history remains in PostgreSQL.
@@ -126,3 +128,5 @@ For real email, set `EMAIL_MODE=smtp`, `SMTP_URL`, and `EMAIL_FROM` in both API 
 ## Project plan
 
 See [BLUEPRINT.md](BLUEPRINT.md) for the architecture, data model, API plan, delivery lifecycle, security rules, and milestones. Deployment is deferred.
+
+An importable Postman collection is available at [docs/postman/notification-service.postman_collection.json](docs/postman/notification-service.postman_collection.json).

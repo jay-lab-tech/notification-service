@@ -181,6 +181,25 @@ paths:
       responses:
         '200': { description: Notification was requeued }
         '404': { description: Dead-letter job not found }
+  /api/providers/twilio/status:
+    post:
+      tags: [Notifications]
+      summary: Receive a signed Twilio SMS delivery callback
+      description: Public callback endpoint authenticated with Twilio's X-Twilio-Signature. Requires TWILIO_STATUS_CALLBACK_URL configuration.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                MessageSid: { type: string }
+                MessageStatus: { type: string, enum: [queued, sending, sent, delivered, failed, undelivered] }
+                To: { type: string }
+                From: { type: string }
+      responses:
+        '204': { description: Callback accepted }
+        '403': { description: Invalid Twilio signature or callback URL }
 components:
   securitySchemes:
     ApiKeyAuth:
@@ -202,6 +221,7 @@ components:
         userId: { type: string, maxLength: 150 }
         priority: { type: string, enum: [LOW, NORMAL, HIGH], default: NORMAL }
         metadata: { type: object, additionalProperties: true }
+        fallback: { $ref: '#/components/schemas/FallbackNotification' }
         scheduledAt: { type: string, format: date-time }
       description: Supply body, or templateCode and variables. EMAIL requires a subject when body is supplied.
     TemplateInput:
@@ -226,6 +246,16 @@ components:
     Channel:
       type: string
       enum: [EMAIL, PUSH, SMS, WEBHOOK]
+      description: EMAIL uses SMTP, PUSH uses FCM, SMS uses Twilio, and WEBHOOK posts signed JSON to operator-allowlisted HTTPS hosts. Provider configuration is required for real delivery.
+    FallbackNotification:
+      type: object
+      required: [channel, recipient, body]
+      description: Optional single fallback attempted after all primary-channel retries are exhausted. If it also fails, the notification enters the DLQ.
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        recipient: { type: string, minLength: 1, maxLength: 2048 }
+        subject: { type: string, maxLength: 300, description: Required when fallback channel is EMAIL }
+        body: { type: string, minLength: 1, maxLength: 100000 }
     Error:
       type: object
       properties:

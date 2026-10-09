@@ -69,7 +69,7 @@ Bulk send, admin key management, and signed provider callbacks are planned addit
 
 ## Delivery lifecycle
 
-`QUEUED → SENT → DELIVERED` for successful delivery and provider confirmation. Transient errors are retried with exponential backoff. Exhausted jobs become `DLQ`; validation/permanent provider failures are recorded with a clear failure reason. `SENT` means accepted by the provider, not necessarily received by a human.
+`QUEUED → SENT → DELIVERED` for successful delivery and provider confirmation. Transient errors are retried with exponential backoff; after primary retries, one optional alternate channel can run before an exhausted job becomes `DLQ`. Validation/permanent provider failures are recorded with a clear failure reason. `SENT` means accepted by the provider, not necessarily received by a human.
 
 ## Planned milestones
 
@@ -77,8 +77,8 @@ Bulk send, admin key management, and signed provider callbacks are planned addit
 2. API-key provisioning/authentication, notification submission, idempotency, and status/history endpoints. (Implemented.)
 3. Service-scoped template CRUD, required-variable validation, and Handlebars rendering. (Implemented.)
 4. BullMQ producers/workers, delivery attempts, retry policy, service-scoped DLQ inspection and manual retry. (Implemented.)
-5. Email provider integration and local/test provider configuration. (SMTP and local simulation implemented.)
-6. Webhook channel and signed delivery callbacks; evaluate FCM/Twilio integrations as separate provider work.
+5. Email provider integration and local/test provider configuration. (SMTP and local simulation implemented; SMTP protocol covered with a local sink test.)
+6. Webhook channel with signed requests, destination allowlisting, public-IP validation/DNS pinning, plus FCM HTTP v1 and Twilio SMS adapters. Provider callback delivery receipts remain future work.
 7. Per-recipient/channel Redis rate limits and bulk submission with item-level results. (Implemented.)
 8. Operational docs, examples, and final verification.
 

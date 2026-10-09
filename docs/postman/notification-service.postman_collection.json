@@ -1,0 +1,53 @@
+{
+  "info": {
+    "name": "Notification Service",
+    "description": "Local smoke-test requests. Set baseUrl and apiKey collection variables before use.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3003" },
+    { "key": "apiKey", "value": "" },
+    { "key": "notificationId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        { "name": "Liveness", "request": { "method": "GET", "url": "{{baseUrl}}/health" } },
+        { "name": "Dependencies", "request": { "method": "GET", "url": "{{baseUrl}}/health/deep" } },
+        { "name": "Queue counts", "request": { "method": "GET", "url": "{{baseUrl}}/health/queues" } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Send email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"channel\": \"EMAIL\",\n  \"recipient\": \"you@example.com\",\n  \"subject\": \"Welcome\",\n  \"body\": \"Queued from Postman\",\n  \"idempotencyKey\": \"postman-welcome-001\"\n}" },
+            "url": "{{baseUrl}}/api/notifications/send"
+          }
+        },
+        {
+          "name": "Bulk send",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"notifications\": [\n    { \"channel\": \"EMAIL\", \"recipient\": \"one@example.com\", \"subject\": \"Hello\", \"body\": \"First\" },\n    { \"channel\": \"EMAIL\", \"recipient\": \"two@example.com\", \"subject\": \"Hello\", \"body\": \"Second\" }\n  ]\n}" },
+            "url": "{{baseUrl}}/api/notifications/bulk"
+          }
+        },
+        { "name": "List history", "request": { "method": "GET", "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }], "url": "{{baseUrl}}/api/notifications" } },
+        { "name": "Get by ID", "request": { "method": "GET", "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }], "url": "{{baseUrl}}/api/notifications/{{notificationId}}" } }
+      ]
+    },
+    {
+      "name": "Dead letters",
+      "item": [
+        { "name": "List dead letters", "request": { "method": "GET", "header": [{ "key": "X-API-Key", "value": "{{apiKey}}" }], "url": "{{baseUrl}}/api/dead-letter" } }
+      ]
+    }
+  ]
+}
