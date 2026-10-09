@@ -4,7 +4,7 @@ Centralized notification API foundation for the `auth-service`, `E-Commerce-API`
 
 ## Current status
 
-The service provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It supports idempotency, service-scoped status/history, and service-scoped Handlebars templates. Delivery workers and external provider integrations are still planned; queued notifications remain `QUEUED` until a worker is added.
+The service provisions hashed API keys, accepts notification requests, stores them, and enqueues channel-specific BullMQ jobs. It supports idempotency, service-scoped status/history and Handlebars templates, delivery logs, retries, and dead-letter inspection/retry. Email supports SMTP and local simulation. Push, SMS, and outbound webhook provider delivery are not integrated yet and will retry into the DLQ.
 
 ## Requirements
 
@@ -20,6 +20,7 @@ docker compose up --build
 ```
 
 The API listens on `http://localhost:3003`, PostgreSQL is exposed on port `5436`, and Redis on port `6383`. These host ports are chosen to avoid collisions with the other portfolio services.
+Compose starts the API and a separate worker. The default `EMAIL_MODE=log` simulates provider acceptance and does not send an external email.
 
 Check liveness and dependency readiness:
 
@@ -99,7 +100,13 @@ npm run db:deploy
 npm run dev
 ```
 
-Copy `.env.example` to `.env` for host-run development. Do not commit `.env` or provider credentials. Integration tests require the local PostgreSQL and Redis services to be running.
+Copy `.env.example` to `.env` for host-run development. Do not commit `.env` or provider credentials. Start the worker in a second terminal with `npm run dev:worker`. Integration tests require local PostgreSQL and Redis.
+
+For real email, set `EMAIL_MODE=smtp`, `SMTP_URL`, and `EMAIL_FROM` in both API and worker environments.
+
+## Delivery tracking and DLQ
+
+`GET /health/queues` reports channel queue counts. Authenticated consumers can inspect their own dead-letter jobs using `GET /api/dead-letter` and retry one using `POST /api/dead-letter/:jobId/retry`. A retry resets the attempt counter; delivery history remains in PostgreSQL.
 
 ## Project plan
 

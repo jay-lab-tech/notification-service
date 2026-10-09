@@ -6,12 +6,14 @@ process.env.NODE_ENV = 'test';
 process.env.PORT = '3003';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5436/notification_service?schema=public';
 process.env.REDIS_URL = 'redis://127.0.0.1:6383';
+process.env.EMAIL_MODE = 'log';
 
-const [{ app }, { prisma }, { createApiKey }, { removeNotificationJob, closeNotificationQueues }] = await Promise.all([
+const [{ app }, { prisma }, { createApiKey }, queueModule, workerModule] = await Promise.all([
   import('../src/app.js'),
   import('../src/config/database.js'),
   import('../src/utils/apiKey.js'),
   import('../src/queues/notificationQueue.js'),
+  import('../src/workers/notification.worker.js'),
 ]);
 const { redis } = await import('../src/config/redis.js');
 
@@ -20,6 +22,7 @@ const secondKey = createApiKey();
 const ownerService = `test-owner-${randomUUID().slice(0, 8)}`;
 const secondService = `test-other-${randomUUID().slice(0, 8)}`;
 const createdNotifications: Array<{ id: string; channel: 'EMAIL' | 'PUSH' | 'SMS' | 'WEBHOOK' }> = [];
+const workers = workerModule.startNotificationWorkers();
 const server = app.listen(0);
 let baseUrl = '';
 
@@ -36,10 +39,12 @@ before(async () => {
 });
 
 after(async () => {
+  await workerModule.closeNotificationWorkers(workers);
   for (const notification of createdNotifications) {
-    await removeNotificationJob(notification.channel, notification.id);
+    await queueModule.removeNotificationJob(notification.channel, notification.id);
+    await queueModule.removeDeadLetterJob(notification.id);
   }
-  await closeNotificationQueues();
+  await queueModule.closeNotificationQueues();
   await prisma.notification.deleteMany({ where: { sourceService: { in: [ownerService, secondService] } } });
   await prisma.template.deleteMany({ where: { sourceService: { in: [ownerService, secondService] } } });
   await prisma.apiKey.deleteMany({ where: { serviceName: { in: [ownerService, secondService] } } });
@@ -52,6 +57,14 @@ after(async () => {
 test('notification API requires a valid API key', async () => {
   const response = await fetch(`${baseUrl}/api/notifications`);
   assert.equal(response.status, 401);
+});
+
+test('queue health reports channel queues', async () => {
+  const response = await fetch(`${baseUrl}/health/queues`);
+  assert.equal(response.status, 200);
+  const body = await response.json() as { data: { queues: Record<string, unknown> } };
+  assert.ok('notifications-email' in body.data.queues);
+  assert.ok('notifications-dead-letter' in body.data.queues);
 });
 
 test('send is idempotent per source service and history is scoped', async () => {
@@ -157,4 +170,60 @@ test('templates are service-scoped and render safely when sending', async () => 
   assert.equal(stored.templateCode, 'welcome-email');
   assert.equal(stored.subject, 'Welcome, &lt;Azhar&gt;');
   assert.equal(stored.body, '<p>Hello &lt;Azhar&gt;</p>');
+
+  const deliveryDeadline = Date.now() + 5_000;
+  let deliveryStatus = stored.status;
+  while (Date.now() < deliveryDeadline && deliveryStatus !== 'SENT') {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    deliveryStatus = (await prisma.notification.findUniqueOrThrow({ where: { id: sent.data.id } })).status;
+  }
+  assert.equal(deliveryStatus, 'SENT');
+  const deliveryLogs = await prisma.deliveryLog.findMany({ where: { notificationId: sent.data.id } });
+  assert.equal(deliveryLogs.length, 1);
+  assert.equal(deliveryLogs[0]?.status, 'SUCCESS');
+});
+
+test('unsupported providers retry into an isolated DLQ and can be manually retried', async () => {
+  const response = await fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': ownerKey.raw },
+    body: JSON.stringify({
+      channel: 'PUSH',
+      recipient: 'device-token',
+      body: 'A push notification',
+    }),
+  });
+  assert.equal(response.status, 202);
+  const created = await response.json() as { data: { id: string } };
+  createdNotifications.push({ id: created.data.id, channel: 'PUSH' });
+
+  const timeout = Date.now() + 20_000;
+  let status = 'QUEUED';
+  while (Date.now() < timeout) {
+    const notification = await prisma.notification.findUniqueOrThrow({ where: { id: created.data.id } });
+    status = notification.status;
+    if (status === 'DLQ') break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  assert.equal(status, 'DLQ');
+
+  const dlqResponse = await fetch(`${baseUrl}/api/dead-letter`, { headers: { 'x-api-key': ownerKey.raw } });
+  assert.equal(dlqResponse.status, 200);
+  const dlqBody = await dlqResponse.json() as { data: Array<{ id: string; notificationId: string }> };
+  const failed = dlqBody.data.find((item) => item.notificationId === created.data.id);
+  assert.ok(failed);
+
+  const hiddenFromOtherService = await fetch(`${baseUrl}/api/dead-letter`, {
+    headers: { 'x-api-key': secondKey.raw },
+  });
+  const hiddenBody = await hiddenFromOtherService.json() as { data: Array<{ notificationId: string }> };
+  assert.equal(hiddenBody.data.some((item) => item.notificationId === created.data.id), false);
+
+  const retryResponse = await fetch(`${baseUrl}/api/dead-letter/${failed.id}/retry`, {
+    method: 'POST',
+    headers: { 'x-api-key': ownerKey.raw },
+  });
+  assert.equal(retryResponse.status, 200);
+  const retried = await prisma.notification.findUniqueOrThrow({ where: { id: created.data.id } });
+  assert.equal(retried.status, 'QUEUED');
 });

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
+import { getNotificationQueueCounts } from '../../queues/notificationQueue.js';
 
 export const healthRoute = Router();
 
@@ -24,4 +25,9 @@ healthRoute.get('/deep', async (_request, response) => {
 
   const status = Object.values(dependencies).every((value) => value === 'ok') ? 'ok' : 'degraded';
   response.status(status === 'ok' ? 200 : 503).json({ data: { status, dependencies } });
+});
+
+healthRoute.get('/queues', async (_request, response) => {
+  const queues = await getNotificationQueueCounts();
+  response.json({ data: { queues } });
 });

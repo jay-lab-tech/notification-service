@@ -10,7 +10,7 @@ Centralized notification service for the portfolio services, with asynchronous d
 - Docker Compose for local development
 - Service-to-service API key authentication; only a SHA-256 hash is stored
 
-The service will expose an HTTP API for `auth-service`, `E-Commerce-API`, and `url-shortener`. It will accept notification requests, persist them, enqueue work, and expose status/history. Provider integrations are staged: email first, then webhook, with FCM and Twilio added only when credentials and provider-specific requirements are ready.
+The service exposes an HTTP API for `auth-service`, `E-Commerce-API`, and `url-shortener`. It accepts notification requests, persists them, enqueues work, and exposes status/history. Email supports SMTP and local simulation. Webhook, FCM, and Twilio provider integrations are future work.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ The API, queue producer, and workers are separate layers. A request is accepted 
 ## Data model
 
 - `ApiKey`: service name, unique key hash, active/revoked state, last-used timestamp.
-- `Template`: unique code, channel, subject/body, JSON variables, active state.
+- `Template`: service-scoped code, channel, subject/body, required variables, active state.
 - `Notification`: idempotency key, source service, optional source user ID, channel, recipient, rendered content, status, priority, attempts, schedule and lifecycle timestamps, metadata.
 - `DeliveryLog`: notification relation, channel/provider, attempt result, provider response, error and duration.
 
@@ -49,9 +49,11 @@ All consumer endpoints require `X-API-Key`.
 | GET | `/api/notifications/:id` | Read status belonging to the caller's service |
 | GET | `/api/notifications` | Paginated history scoped to the caller's service |
 | GET/POST/PUT/DELETE | `/api/templates...` | Template management scoped to the API key's service |
-| GET | `/health/queues` | Planned: queue counts for operational visibility |
+| GET | `/health/queues` | Queue counts for operational visibility |
+| GET | `/api/dead-letter` | List DLQ jobs belonging to the API key's service |
+| POST | `/api/dead-letter/:jobId/retry` | Retry a service-owned DLQ job |
 
-Bulk send, admin key management, provider callbacks, and DLQ retry controls are planned additions and will be documented when implemented. Public API responses must never return API key hashes or provider secrets.
+Bulk send, admin key management, and signed provider callbacks are planned additions. Public API responses must never return API key hashes or provider secrets.
 
 ## Security and delivery rules
 
@@ -72,8 +74,8 @@ Bulk send, admin key management, provider callbacks, and DLQ retry controls are 
 1. Repository foundation: TypeScript, Express, validated environment, health checks, Prisma models, Docker Compose, CI, and docs.
 2. API-key provisioning/authentication, notification submission, idempotency, and status/history endpoints. (Implemented.)
 3. Service-scoped template CRUD, required-variable validation, and Handlebars rendering. (Implemented.)
-4. BullMQ producers/workers, delivery attempts, retry policy, and DLQ inspection.
-5. Email provider integration and local/test provider configuration.
+4. BullMQ producers/workers, delivery attempts, retry policy, service-scoped DLQ inspection and manual retry. (Implemented.)
+5. Email provider integration and local/test provider configuration. (SMTP and local simulation implemented.)
 6. Webhook channel and signed delivery callbacks; evaluate FCM/Twilio integrations as separate provider work.
 7. Rate limits, bulk APIs, operational docs, examples, and final verification.
 
