@@ -71,6 +71,12 @@ export async function sendNotification(sourceService: string, input: SendNotific
         ...(rendered.code ? { templateCode: rendered.code } : {}),
         ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
         ...(input.metadata ? { metadata: input.metadata as Prisma.InputJsonValue } : {}),
+        ...(input.fallback ? {
+          fallbackChannel: input.fallback.channel as NotificationChannel,
+          fallbackRecipient: input.fallback.recipient,
+          fallbackSubject: input.fallback.subject ?? null,
+          fallbackBody: input.fallback.body,
+        } : {}),
         ...(input.scheduledAt ? { scheduledAt: new Date(input.scheduledAt) } : {}),
       },
     });

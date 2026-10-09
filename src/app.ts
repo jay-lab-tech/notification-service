@@ -6,6 +6,7 @@ import { notificationRoute } from './modules/notification/notification.route.js'
 import { templateRoute } from './modules/template/template.route.js';
 import { deadLetterRoute } from './modules/deadLetter/deadLetter.route.js';
 import { errorHandler } from './middlewares/errorHandler.js';
+import { twilioCallbackRoute } from './modules/providerCallback/twilioCallback.route.js';
 
 export const app = express();
 
@@ -21,6 +22,8 @@ app.get(['/docs', '/docs/'], (_request, response) => {
   response.sendFile(path.resolve('docs/index.html'));
 });
 app.use('/docs', express.static('docs'));
+
+app.use('/api/providers/twilio/status', twilioCallbackRoute);
 
 app.get('/health', (_request, response) => {
   response.status(200).json({ data: { status: 'ok' } });

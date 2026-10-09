@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
+import twilio from 'twilio';
 
 process.env.NODE_ENV = 'test';
 process.env.PORT = '3003';
 process.env.DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:5436/notification_service?schema=public';
 process.env.REDIS_URL = 'redis://127.0.0.1:6383';
 process.env.EMAIL_MODE = 'log';
+process.env.WEBHOOK_ALLOWED_HOSTS = '';
+delete process.env.FCM_PROJECT_ID;
+delete process.env.FCM_CLIENT_EMAIL;
+delete process.env.FCM_PRIVATE_KEY;
+process.env.TWILIO_ACCOUNT_SID = 'AC00000000000000000000000000000000';
+process.env.TWILIO_AUTH_TOKEN = 'local-test-twilio-token';
+process.env.TWILIO_FROM_NUMBER = '+15551234567';
+process.env.TWILIO_STATUS_CALLBACK_URL = 'https://notifications.example.test/api/providers/twilio/status';
 
 const [{ app }, { prisma }, { createApiKey }, queueModule, workerModule] = await Promise.all([
   import('../src/app.js'),
@@ -181,6 +190,56 @@ test('email payloads require a subject', async () => {
   assert.equal(response.status, 400);
 });
 
+test('SMS recipients must use E.164 phone number format', async () => {
+  const response = await fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': ownerKey.raw },
+    body: JSON.stringify({ channel: 'SMS', recipient: '5551234567', body: 'Test SMS' }),
+  });
+  assert.equal(response.status, 400);
+});
+
+test('Twilio delivery callbacks require a valid signature and update SMS status', async () => {
+  const notification = await prisma.notification.create({
+    data: {
+      sourceService: ownerService,
+      channel: 'SMS',
+      recipient: '+14155552671',
+      body: 'Delivery receipt test',
+      status: 'SENT',
+      attempts: 1,
+    },
+  });
+  createdNotifications.push({ id: notification.id, channel: 'SMS' });
+
+  const callbackUrl = new URL(process.env.TWILIO_STATUS_CALLBACK_URL!);
+  callbackUrl.searchParams.set('notificationId', notification.id);
+  const params = {
+    MessageSid: 'SM00000000000000000000000000000000',
+    MessageStatus: 'delivered',
+    To: notification.recipient,
+    From: '+15551234567',
+  };
+  const callbackPath = `${callbackUrl.pathname}${callbackUrl.search}`;
+  const invalid = await fetch(`${baseUrl}${callbackPath}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-twilio-signature': 'invalid' },
+    body: new URLSearchParams(params),
+  });
+  assert.equal(invalid.status, 403);
+
+  const signature = twilio.getExpectedTwilioSignature(process.env.TWILIO_AUTH_TOKEN!, callbackUrl.toString(), params);
+  const valid = await fetch(`${baseUrl}${callbackPath}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-twilio-signature': signature },
+    body: new URLSearchParams(params),
+  });
+  assert.equal(valid.status, 204);
+  const updated = await prisma.notification.findUniqueOrThrow({ where: { id: notification.id } });
+  assert.equal(updated.status, 'DELIVERED');
+  assert.ok(updated.deliveredAt);
+});
+
 test('templates are service-scoped and render safely when sending', async () => {
   const headers = { 'content-type': 'application/json', 'x-api-key': ownerKey.raw };
   const templateResponse = await fetch(`${baseUrl}/api/templates`, {
@@ -288,4 +347,40 @@ test('unsupported providers retry into an isolated DLQ and can be manually retri
   assert.equal(retryResponse.status, 200);
   const retried = await prisma.notification.findUniqueOrThrow({ where: { id: created.data.id } });
   assert.equal(retried.status, 'QUEUED');
+});
+
+test('exhausted primary delivery uses one configured fallback channel', async () => {
+  const response = await fetch(`${baseUrl}/api/notifications/send`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': ownerKey.raw },
+    body: JSON.stringify({
+      channel: 'PUSH',
+      recipient: 'unconfigured-test-device',
+      body: 'Primary push attempt',
+      fallback: {
+        channel: 'EMAIL',
+        recipient: `fallback-${randomUUID()}@example.test`,
+        subject: 'Fallback notification',
+        body: 'Fallback email body',
+      },
+    }),
+  });
+  assert.equal(response.status, 202);
+  const accepted = await response.json() as { data: { id: string } };
+  createdNotifications.push({ id: accepted.data.id, channel: 'PUSH' }, { id: accepted.data.id, channel: 'EMAIL' });
+
+  const deadline = Date.now() + 20_000;
+  let delivered = false;
+  while (Date.now() < deadline) {
+    const current = await prisma.notification.findUniqueOrThrow({ where: { id: accepted.data.id } });
+    if (current.channel === 'EMAIL' && current.status === 'SENT') {
+      delivered = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  assert.equal(delivered, true);
+  const logs = await prisma.deliveryLog.findMany({ where: { notificationId: accepted.data.id } });
+  assert.equal(logs.filter((entry) => entry.channel === 'PUSH' && entry.status === 'FAILED').length, 3);
+  assert.equal(logs.filter((entry) => entry.channel === 'EMAIL' && entry.status === 'SUCCESS').length, 1);
 });

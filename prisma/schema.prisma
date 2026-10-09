@@ -81,6 +81,10 @@ model Notification {
   attempts       Int                  @default(0)
   maxAttempts    Int                  @default(3)
   metadata       Json?
+  fallbackChannel   NotificationChannel?
+  fallbackRecipient String?              @db.Text
+  fallbackSubject   String?              @db.VarChar(300)
+  fallbackBody      String?              @db.Text
   scheduledAt    DateTime?
   sentAt         DateTime?
   deliveredAt    DateTime?
