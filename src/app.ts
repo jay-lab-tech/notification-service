@@ -17,7 +17,7 @@ app.use(express.json({ limit: '256kb' }));
 app.get(['/docs', '/docs/'], (_request, response) => {
   response.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:",
+    "default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; object-src 'none'; base-uri 'self'",
   );
   response.sendFile(path.resolve('docs/index.html'));
 });
