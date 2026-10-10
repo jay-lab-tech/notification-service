@@ -130,3 +130,12 @@ Push (FCM), SMS (Twilio), and signed webhook configuration are optional. See [pr
 See [BLUEPRINT.md](BLUEPRINT.md) for the architecture, data model, API plan, delivery lifecycle, security rules, and milestones. Deployment is deferred.
 
 An importable Postman collection is available at [docs/postman/notification-service.postman_collection.json](docs/postman/notification-service.postman_collection.json).
+
+## Project documentation
+
+- [Architecture and delivery lifecycle](ARCHITECTURE.md)
+- [Detailed API reference](API.md)
+- [Consumer integration guide](INTEGRATION.md) and [integration examples](docs/INTEGRATION.md)
+- [Provider configuration and security](docs/PROVIDERS.md)
+- [Blueprint](BLUEPRINT.md)
+- [Changelog](CHANGELOG.md)
