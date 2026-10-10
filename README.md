@@ -139,3 +139,9 @@ An importable Postman collection is available at [docs/postman/notification-serv
 - [Provider configuration and security](docs/PROVIDERS.md)
 - [Blueprint](BLUEPRINT.md)
 - [Changelog](CHANGELOG.md)
+
+### Live API documentation
+
+Captured from the running local API at `/docs`:
+
+![Notification Service Swagger UI](output/playwright/api-docs.png)
